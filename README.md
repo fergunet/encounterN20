@@ -12,10 +12,12 @@ https://nivel20.com/games/dnd-5/campaigns/NOMBRECAMPANIA/tracking_log
 
 Al abrir el modal "Encuentro" y añadir criaturas, aparece un panel con:
 
-- **Dificultad (reglas 2014)**: Trivial / Fácil / Medio / Difícil / Mortal, calculada según el número y nivel de los personajes de la campaña.
+- **Dificultad (reglas 2014)**: Trivial / Fácil / Medio / Difícil / Mortal, calculada según el número y nivel de los personajes de la campaña (y de los aliados que añadas, ver más abajo).
 - **XP total** y **XP por jugador**: la experiencia real que se repartiría al derrotar a las criaturas.
 - **XP ajustada a repartir** y **XP ajustada por jugador**: la XP con el multiplicador de dificultad aplicado (según el número de monstruos y el tamaño del grupo).
-- **TTK estimado**: turnos que tardaría el grupo en derrotar a las criaturas, estimado solo a partir del nivel de cada personaje (tabla oficial de Daño/Asalto por Valor de Desafío del DMG 2014, pág. 274).
+- **TTK estimado**: turnos que tardaría el grupo en derrotar a las criaturas, estimado solo a partir del nivel de cada personaje y del Valor de Desafío de cada aliado (tabla oficial de Daño/Asalto por Valor de Desafío del DMG 2014, pág. 274).
+
+Las criaturas que añadas al equipo **"Personajes"** dentro del modal (compañeros, familiares, aliados) cuentan como miembros extra del grupo: su Valor de Desafío se trata como un nivel de personaje equivalente a la hora de sumar a los umbrales de dificultad, al tamaño de grupo (para el multiplicador de monstruos) y al TTK. No aportan XP ni PG al bando hostil, ya que no son una amenaza.
 
 El panel se recalcula automáticamente cada vez que añades, quitas o cambias la cantidad de un monstruo.
 
@@ -54,7 +56,7 @@ Si cambias `nivel20-encounter-helper.user.js` (o descargas una versión nueva), 
 
 ## Limitaciones conocidas
 
-- El **TTK** es una estimación basada únicamente en el **nivel** de cada personaje (no en sus armas, hechizos o clase), usando la tabla de Daño/Asalto por Valor de Desafío del DMG 2014. Es orientativo, no un cálculo exacto de combate.
-- Las criaturas añadidas al equipo **"Personajes"** (aliados/compañeros) no cuentan como amenaza en los cálculos de dificultad, XP ni TTK.
+- El **TTK** es una estimación basada únicamente en el **nivel** de cada personaje y el **Valor de Desafío** de cada aliado (no en armas, hechizos o clase), usando la tabla de Daño/Asalto por Valor de Desafío del DMG 2014. Es orientativo, no un cálculo exacto de combate.
+- Los aliados solo suman a la dificultad/TTK como "miembros extra del grupo"; nunca aportan XP ni PG al bando hostil.
 - Los datos de cada monstruo (puntos de golpe y XP) se obtienen en tiempo real de su ficha en Nivel20, así que necesitas conexión y que la ficha exista en el sitio.
 - El script depende de la estructura HTML actual de Nivel20; si la web cambia su maquetación, puede dejar de funcionar y necesitar actualización.

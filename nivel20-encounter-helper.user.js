@@ -101,7 +101,24 @@
   // Ficha de criatura: HP / PX, obtenidos de la propia web (cacheado)
   // ---------------------------------------------------------------------
 
-  const creatureCache = new Map(); // creatureId -> Promise<{hp, xp, name}>
+  const creatureCache = new Map(); // creatureId -> Promise<{hp, xp, cr}>
+
+  // "1/8", "1/4", "1/2" o un entero -> valor numerico
+  function parseCr(crStr) {
+    if (!crStr) return null;
+    if (crStr.includes('/')) {
+      const [num, den] = crStr.split('/').map(Number);
+      return den ? num / den : null;
+    }
+    const n = parseFloat(crStr.replace(',', '.'));
+    return Number.isNaN(n) ? null : n;
+  }
+
+  // Nivel de personaje equivalente a un Valor de Desafío, para reutilizar
+  // XP_THRESHOLDS y DPR_BY_LEVEL con criaturas aliadas (ver computeEncounterInfo).
+  function levelForCr(cr) {
+    return Math.min(20, Math.max(1, Math.round(cr)));
+  }
 
   function fetchCreatureStats(creatureId) {
     if (creatureCache.has(creatureId)) return creatureCache.get(creatureId);
@@ -115,14 +132,15 @@
         const text = main.innerText.replace(/\s+/g, ' ');
 
         const hpMatch = text.match(/Puntos de Golpe:\s*(\d+)/);
-        const xpMatch = text.match(/Valor de desafío:[^(]*\(([\d.,]+)\s*PX\)/);
+        const statMatch = text.match(/Valor de desafío:\s*([\d/]+)\s*\(([\d.,]+)\s*PX\)/);
 
         return {
           hp: hpMatch ? parseInt(hpMatch[1], 10) : null,
-          xp: xpMatch ? parseInt(xpMatch[1].replace(/[.,]/g, ''), 10) : null,
+          xp: statMatch ? parseInt(statMatch[2].replace(/[.,]/g, ''), 10) : null,
+          cr: statMatch ? parseCr(statMatch[1]) : null,
         };
       })
-      .catch(() => ({ hp: null, xp: null }));
+      .catch(() => ({ hp: null, xp: null, cr: null }));
 
     creatureCache.set(creatureId, promise);
     return promise;
@@ -151,11 +169,27 @@
     let hostileCount = 0;
     let hostileXpTotal = 0;
     let hostileHpTotal = 0;
+    let alliesCount = 0;
     let missingData = false;
 
+    // Niveles equivalentes de los aliados (criaturas del equipo "Personajes"),
+    // usando su Valor de Desafío como si fuera su nivel. Cuentan como
+    // miembros extra del grupo para la dificultad y el TTK, pero no aportan
+    // XP/PG al bando hostil.
+    const allyLevels = [];
+
     encounterRows.forEach(({ creatureId, count, team }) => {
-      if (team === 'characters') return; // aliado, no cuenta como amenaza
       const stats = statsById.get(creatureId);
+      if (team === 'characters') {
+        if (!stats || stats.cr == null) {
+          missingData = true;
+          return;
+        }
+        const level = levelForCr(stats.cr);
+        for (let i = 0; i < count; i++) allyLevels.push(level);
+        alliesCount += count;
+        return;
+      }
       if (!stats || stats.hp == null || stats.xp == null) {
         missingData = true;
         return;
@@ -166,14 +200,15 @@
     });
 
     const partySize = partyLevels.length;
+    const effectivePartySize = partySize + alliesCount;
 
-    // Dificultad
+    // Dificultad (personajes + aliados, estos ultimos con su VD como nivel equivalente)
     let easySum = 0, mediumSum = 0, hardSum = 0, deadlySum = 0;
-    partyLevels.forEach((level) => {
+    partyLevels.concat(allyLevels).forEach((level) => {
       const t = XP_THRESHOLDS[Math.min(20, Math.max(1, level))];
       easySum += t[0]; mediumSum += t[1]; hardSum += t[2]; deadlySum += t[3];
     });
-    const multiplier = getEncounterMultiplier(hostileCount, partySize);
+    const multiplier = getEncounterMultiplier(hostileCount, effectivePartySize);
     const adjustedXp = hostileXpTotal * multiplier;
 
     let difficulty = 'Trivial';
@@ -188,13 +223,16 @@
     // XP ajustada a repartir (con el multiplicador de dificultad aplicado) y su reparto por jugador
     const adjustedXpPerPlayer = partySize > 0 ? adjustedXp / partySize : adjustedXp;
 
-    // TTK: turnos estimados para que el grupo derrote a las criaturas hostiles,
-    // basado solo en el nivel de cada personaje (ver DPR_BY_LEVEL).
-    const partyDpr = partyLevels.reduce((sum, level) => sum + (DPR_BY_LEVEL[Math.min(20, Math.max(1, level))] || 0), 0);
+    // TTK: turnos estimados para que el grupo (personajes + aliados) derrote
+    // a las criaturas hostiles, basado solo en el nivel/VD de cada uno
+    // (ver DPR_BY_LEVEL). No se tienen en cuenta armas, hechizos ni clase.
+    const partyDpr = partyLevels.concat(allyLevels)
+      .reduce((sum, level) => sum + (DPR_BY_LEVEL[Math.min(20, Math.max(1, level))] || 0), 0);
     const ttk = hostileHpTotal > 0 && partyDpr > 0 ? Math.ceil(hostileHpTotal / partyDpr) : null;
 
     return {
       partySize,
+      alliesCount,
       hostileCount,
       difficulty,
       adjustedXp: Math.round(adjustedXp),
@@ -240,14 +278,17 @@
       ? `${info.ttk} turno${info.ttk === 1 ? '' : 's'}`
       : (info.hostileCount > 0 ? 'sin datos suficientes' : '—');
 
+    const partyText = `${info.partySize} jugador${info.partySize === 1 ? '' : 'es'}`
+      + (info.alliesCount > 0 ? ` + ${info.alliesCount} aliado${info.alliesCount === 1 ? '' : 's'}` : '');
+
     panel.innerHTML = `
       <strong>Dificultad (reglas 2014):</strong> ${info.difficulty}
-      <span style="opacity:.7">(Fácil ${info.thresholds.easySum} · Medio ${info.thresholds.mediumSum} · Difícil ${info.thresholds.hardSum} · Mortal ${info.thresholds.deadlySum}, ${info.partySize} jugador${info.partySize === 1 ? '' : 'es'})</span><br>
+      <span style="opacity:.7">(Fácil ${info.thresholds.easySum} · Medio ${info.thresholds.mediumSum} · Difícil ${info.thresholds.hardSum} · Mortal ${info.thresholds.deadlySum}, ${partyText})</span><br>
       <strong>XP total:</strong> ${info.xpTotal} &nbsp; <strong>XP por jugador:</strong> ${info.xpPerPlayer}<br>
       <strong>XP ajustada a repartir:</strong> ${info.adjustedXp} &nbsp; <strong>XP ajustada por jugador:</strong> ${info.adjustedXpPerPlayer}
       <span style="opacity:.7">(con el multiplicador de dificultad aplicado)</span><br>
       <strong>TTK estimado:</strong> ${ttkText}
-      <span style="opacity:.7">(turnos del grupo para derrotar a las criaturas, basado solo en el nivel de cada PJ)</span>
+      <span style="opacity:.7">(basado solo en el nivel de cada PJ y el VD de cada aliado)</span>
       ${info.missingData ? '<br><span style="color:#b45309">⚠ No se pudieron obtener los datos de alguna criatura.</span>' : ''}
     `;
   }
