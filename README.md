@@ -8,6 +8,8 @@ Funciona en páginas del tipo:
 https://nivel20.com/games/dnd-5/campaigns/NOMBRECAMPANIA/tracking_log
 ```
 
+![Panel del ayudante de encuentros dentro del modal "Configurar el encuentro"](./screenshot.png)
+
 ## Qué muestra
 
 Al abrir el modal "Encuentro" y añadir criaturas, aparece un panel con:
